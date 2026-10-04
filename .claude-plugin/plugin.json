@@ -1,0 +1,59 @@
+{
+  "name": "migration-guard",
+  "version": "0.1.0",
+  "description": "Makes Claude ask before it touches your database migrations or runs destructive SQL, with the risk and what it found.",
+  "homepage": "https://github.com/balen-abd/claude-migration-guard",
+  "license": "MIT",
+  "author": {
+    "name": "Balen",
+    "url": "https://x.com/balen_abda"
+  },
+  "keywords": [
+    "migrations",
+    "database",
+    "postgres",
+    "mysql",
+    "prisma",
+    "typeorm",
+    "rails",
+    "django",
+    "supabase",
+    "safety",
+    "mod"
+  ],
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "When to ask",
+      "description": "always: before every migration change. destructive-only: only when drops, truncates, type changes or risky commands (revert, reset, push, wipe...) show up. off: never ask (for a while, type /migration-guard off instead).",
+      "default": "always",
+      "options": [
+        "always",
+        "destructive-only",
+        "off"
+      ]
+    },
+    "extraPathPattern": {
+      "type": "string",
+      "title": "Extra migration path pattern",
+      "description": "A regular expression for migration files the built-in rules miss, e.g. schema/changes/",
+      "default": ""
+    },
+    "extraCommandPattern": {
+      "type": "string",
+      "title": "Extra migration command pattern",
+      "description": "A regular expression for migration commands the built-in rules miss, e.g. make db-up",
+      "default": ""
+    },
+    "keepHistory": {
+      "type": "string",
+      "title": "Keep a history",
+      "description": "on: remember each question and answer, shown by /migration-guard (kept by Claude Code, passwords masked). off: keep nothing.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    }
+  }
+}
