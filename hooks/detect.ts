@@ -557,10 +557,9 @@ function writesMigration(text: string, extraPath?: RegExp): boolean {
 // A short command name only counts where a command starts: `grep -rni` is not PowerShell's `rni`.
 const AT_COMMAND = String.raw`(?:^\s*|[|({\x60]\s*|\$\(\s*|\bxargs(?:\s+-\S+)*\s+|-exec(?:dir)?\s+|\b(?:sudo|time|nohup|command|env)\s+(?:-\S+\s+)*|\b\w+=\S*\s+)`
 const IN_PLACE = /\b(sed|perl)\b[^|;&\n]{0,300}?\s(-\w*i|--in-place)/i
-// Unix, Windows (cmd, PowerShell) ways of changing, moving or deleting files.
-const FILE_VERB = new RegExp(
+// Unix, Windows (cmd, PowerShell) ways of changing, moving or deleting files, other than editing in place.
+const OTHER_FILE_VERB = new RegExp(
   [
-    IN_PLACE.source,
     `${AT_COMMAND}(rm|rmdir|mv|truncate|unlink|shred|del|erase|rd|ren|rename|move|ri|ni|mi|rni|touch|unzip)(?=\\s|$)`,
     `${AT_COMMAND}(tar\\s+-?\\w*x|tar\\b[^|;&\\n]{0,200}--extract|dd\\b[^|;&\\n]{0,300}?\\bof=|(curl|wget)\\b[^|;&\\n]{0,300}?\\s-[oO]\\b)`,
     String.raw`\bgit\s+(checkout(?!\s+-[bBt]\b)|restore(?![^|;&\n]{0,200}--staged\b)|rm|mv|clean|apply|stash)\b`,
@@ -569,6 +568,101 @@ const FILE_VERB = new RegExp(
   ].join('|'),
   'i',
 )
+const FILE_VERB = new RegExp(`${IN_PLACE.source}|${OTHER_FILE_VERB.source}`, 'i')
+
+/**
+ * The step without the script that sed or perl runs. In `sed -i 's/a migration/b/' notes.txt`
+ * the quoted part is code and only notes.txt changes, so only notes.txt (and anything piped in,
+ * as in `find migrations | xargs sed -i ...`) should say where the edit lands.
+ */
+function withoutEditScript(text: string): string {
+  // The sed or perl that edits in place, not just the first "sed" in the line (./sed.txt).
+  const m = IN_PLACE.exec(text)
+  if (!m) return text
+  const name = m[1] ?? ''
+  const sed = name.toLowerCase() === 'sed'
+  const head = m.index + name.length
+  const words: Array<{ raw: string; value: string }> = []
+  let i = head
+  let end = text.length
+  while (i < text.length) {
+    while (i < text.length && /\s/.test(text.charAt(i))) i++
+    if (i >= text.length) break
+    if (/[|;&]/.test(text.charAt(i))) {
+      end = i
+      break
+    }
+    let raw = ''
+    let value = ''
+    while (i < text.length && !/[\s|;&]/.test(text.charAt(i))) {
+      const ch = text.charAt(i)
+      if (ch === "'" || ch === '"') {
+        let j = i + 1
+        while (j < text.length && text.charAt(j) !== ch) j += ch === '"' && text.charAt(j) === '\\' ? 2 : 1
+        value += text.slice(i + 1, j)
+        raw += text.slice(i, j + 1)
+        i = j + 1
+      } else if (ch === '\\' && i + 1 < text.length) {
+        value += text.charAt(i + 1)
+        raw += text.slice(i, i + 2)
+        i += 2
+      } else {
+        value += ch
+        raw += ch
+        i++
+      }
+    }
+    words.push({ raw, value })
+  }
+
+  const drop = new Set<number>()
+  let script = false
+  let options = true
+  for (let k = 0; k < words.length; k++) {
+    const w = words[k]?.value ?? ''
+    if (options && w === '--') {
+      options = false
+    } else if (options && /^--(expression|file)$/.test(w)) {
+      drop.add(k + 1)
+      k++
+      script = true
+    } else if (options && /^--(expression|file)=/.test(w)) {
+      drop.add(k)
+      script = true
+    } else if (options && /^-[^-]/.test(w)) {
+      // A bundle like -pi, -ne, -i.bak. After i comes a backup suffix; after e (or f for sed) the script.
+      for (let c = 1; c < w.length; c++) {
+        const flag = w.charAt(c)
+        if (flag === 'i') {
+          // BSD sed takes the suffix as its own word: sed -i '' 's/a/b/' x
+          if (sed && c === w.length - 1 && w.length === 2 && (words[k + 1]?.value === '' || words[k + 1]?.value.startsWith('.'))) {
+            drop.add(k + 1)
+            k++
+          }
+          break
+        }
+        // sed -E is extended regexps; perl -E is -e with features on.
+        if (flag === 'e' || (flag === 'E' && !sed) || (flag === 'f' && sed)) {
+          if (c < w.length - 1) drop.add(k)
+          else {
+            drop.add(k + 1)
+            k++
+          }
+          script = true
+          break
+        }
+        if (/[lI0MmFCdDx]/.test(flag)) break // takes the rest of the bundle as its value
+      }
+    } else if (!script) {
+      // No -e: sed's first word is its script, perl's is a program file. Neither is a file it edits.
+      drop.add(k)
+      script = true
+      options = false
+    }
+  }
+  const kept = words.filter((_, k) => !drop.has(k)).map((w) => w.raw)
+  return `${text.slice(0, head)} ${kept.join(' ')} ${text.slice(end)}`
+}
 // Copies only change migrations when they land in a migrations folder: cp migrations/x.sql /tmp/ is a read.
 const COPY_VERB = new RegExp(`${AT_COMMAND}(cp|copy|cpi|rsync|install|ln)(?=\\s|$)|\\bCopy-Item\\b`, 'i')
 const DELETES = new RegExp(
@@ -798,7 +892,9 @@ export function classifyCommand(
     // Quoted text is a search pattern or a message, unless the step hands it to a shell.
     const verbs = RUNS_QUOTED.test(step.text) ? step.text : unquoted(step.text)
     const patch = APPLIES_PATCH.test(verbs)
-    if ((patch || FILE_VERB.test(verbs)) && (insideMigrations || MIGRATION_DIR_WORD.test(patch ? liveText : step.text))) {
+    // sed -i and perl -pi: the script they run is not a path, so only the files they edit count.
+    const where = patch ? liveText : IN_PLACE.test(verbs) && !OTHER_FILE_VERB.test(verbs) ? withoutEditScript(step.text) : step.text
+    if ((patch || FILE_VERB.test(verbs)) && (insideMigrations || MIGRATION_DIR_WORD.test(where))) {
       return shellChange(step, [])
     }
     if (COPY_VERB.test(verbs)) {

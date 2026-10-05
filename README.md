@@ -176,7 +176,7 @@ claude plugin validate --strict .
 claude plugin test .
 ```
 
-99 tests. CI runs them on Linux, macOS and Windows, against 2.1.287 and the latest Claude Code, every week.
+100 tests. CI runs them on Linux, macOS and Windows, against 2.1.287 and the latest Claude Code, every week.
 
 To see if it's actually worth having, I replayed every tool call from 365 of my own past Claude Code sessions through it: 26,157 shell commands and 682 file writes and edits. It would have asked 46 times. 21 were migration files Claude wrote or edited, 23 were migration files changed from the shell or by a Python script, and 2 were real `npm run migration:run` runs. As far as I can tell only one was a false alarm: deleting from a scratch copy of the migrations folder. The other 26,000-odd commands went through without a word.
 

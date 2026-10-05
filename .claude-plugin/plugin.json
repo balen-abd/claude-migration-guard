@@ -1,6 +1,6 @@
 {
   "name": "migration-guard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Makes Claude ask before it touches your database migrations or runs destructive SQL, with the risk and what it found.",
   "homepage": "https://github.com/balen-abd/claude-migration-guard",
   "license": "MIT",

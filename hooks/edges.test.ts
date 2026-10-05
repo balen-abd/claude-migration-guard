@@ -476,6 +476,27 @@ test('a folder whose name only starts with "migration" is not a migrations folde
   expect(asks('echo x > "$ROOT"/migrations/001.sql')).toBe(true)
 })
 
+// Found live while posting the demo: a sed script that mentions "migration" asked about notes.
+test('the script sed or perl runs is not where the edit lands', () => {
+  expect(asks('sed -i "s/before it touches a migration/before a migration/" mg-post.txt')).toBe(false)
+  expect(asks("sed -i 's/a migration/the migration/' notes.txt")).toBe(false)
+  expect(asks("sed -i -e 's|old|migrations/|' -e 's/x/y/' README.md")).toBe(false)
+  expect(asks("sed -i '' 's/migrations\\//db\\//' docs/setup.md")).toBe(false)
+  expect(asks("sed -i.bak --expression='s/migration/m/' a.txt")).toBe(false)
+  expect(asks("perl -pi -e 's/migrations\\//db\\//' notes.txt")).toBe(false)
+  expect(asks("perl -pi -e 's/a/b/' -- notes.txt")).toBe(false)
+  // The files it edits still count, quoted or not, and so does a list piped in.
+  expect(asks("sed -i 's/old/new/' db/migrations/0042_x.sql")).toBe(true)
+  expect(asks('sed -i "s/old/new/" "db/migrations/0042 x.sql"')).toBe(true)
+  expect(asks("sed -i -e 's/a/b/' migrations/0042_x.sql")).toBe(true)
+  expect(asks("sed -i '' 's/a/b/' migrations/0042_x.sql")).toBe(true)
+  expect(asks("perl -pi -e 's/a/b/' migrations/0042_x.sql")).toBe(true)
+  expect(asks("find migrations -name '*.sql' | xargs sed -i 's/a/b/'")).toBe(true)
+  expect(asks("cd db/migrations && sed -i 's/a/b/' 0042_x.sql")).toBe(true)
+  // Another verb in the same step is judged on the whole step, as before.
+  expect(asks("sed -i 's/a/b/' x.txt | rm migrations/0042_x.sql")).toBe(true)
+})
+
 // From a replay of 26,000 real commands: these asked before and shouldn't.
 test('stays quiet on the read-only work a real session is full of', () => {
   for (const command of [

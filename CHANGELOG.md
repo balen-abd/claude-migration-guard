@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 (2026-10-05)
+
+- `sed -i` and `perl -pi` no longer ask when only their script mentions a migration (`sed -i 's/a migration/the migration/' notes.txt`). The files they edit, and lists piped in with `xargs`, still count. Found while recording the demo; the replay of 26,168 real commands asks about the same 47 things as before.
+
 ## 0.1.0 (2026-10-04)
 
 First release.
