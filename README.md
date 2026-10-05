@@ -4,6 +4,19 @@ A Claude Code mod that makes Claude ask before it touches your database migratio
 
 I let Claude Code work on a large Postgres codebase every day, and it's good at it. But migrations are the one place where "looks fine" isn't enough. A single generated file can drop a column or quietly lose a pile of indexes, and you find out in production. So this makes Claude ask me first, and only for migrations and the database.
 
+## Quick start
+
+1. Make sure Claude Code is 2.1.287 or newer: `claude --version`. If it's older, run `claude update`.
+2. Install it:
+
+   ```bash
+   git clone https://github.com/balen-abd/claude-migration-guard ~/.claude/skills/migration-guard
+   ```
+
+3. Check it's on: `claude -p /migration-guard` should print `migration-guard: Nothing asked yet.`
+
+That's all. Next time Claude goes to change a migration, it asks you first. Windows, updating, removing and other ways to load it are under [Install](#install); what you can change is under [Settings](#settings).
+
 ## What you see
 
 ```
